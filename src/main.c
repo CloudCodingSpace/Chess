@@ -35,6 +35,7 @@ typedef struct {
 
     Quad board;
     Texture boardTex;
+    Texture atlasTex;
 } Ctx;
 
 
@@ -51,8 +52,7 @@ static float BOARD_VERTICES[] = {
 char* readFile(const char* path) {
     ASSERT(path != null, "The path shouldn't be null!\n");
     FILE* file = fopen(path, "rt");
-    if(!file)
-        ERROR("Can't read file! Path: %s\n", path);
+    ASSERT(file != null, "Can't read file! Path: %s\n", path);
 
     fseek(file, 0, SEEK_END);
     size_t size = ftell(file);
@@ -184,8 +184,8 @@ void renderQuad(Quad* quad, Texture* tex, uint32_t shader) {
     ASSERT(tex != null, "The tex shouldn't be null!");
     ASSERT(shader != null, "The shader shouldn't be 0!");
  
-    bindTexture(tex);
     glActiveTexture(GL_TEXTURE0);
+    bindTexture(tex);
     glUseProgram(shader);
     glUniform1i(glGetUniformLocation(shader, "u_Tex"), 0);
 
@@ -250,6 +250,10 @@ int main(void) {
 
         glfwGetWindowSize(ctx.window, &ctx.width, &ctx.height);
         glViewport(0, 0, ctx.width, ctx.height);
+    
+        if(glfwGetKey(ctx.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+            break;
+        }
     }
 
     // Cleanup
