@@ -200,6 +200,7 @@ void buildPieceVertices(float* out, int file, int rank, int col, int row, int at
     float size = ATLAS_CELL_SIZE;
     float x = -1.0f + file * size;
     float y = -1.0f + rank * size;
+    const float adjust = 0.018f;
 
     float cellW = ((float)atlasWidth)/atlasCols;
     float cellH = ((float)atlasHeight)/atlasRows;
@@ -208,6 +209,14 @@ void buildPieceVertices(float* out, int file, int rank, int col, int row, int at
     float v0 = (row * cellH) / atlasHeight;
     float u1 = ((col + 1) * cellW) / atlasWidth;
     float v1 = ((row + 1) * cellH) / atlasHeight;
+
+    if(col == 0) {
+        u0 -= adjust;
+        u1 -= adjust;
+    } else {
+        u0 += adjust/2;
+        u1 += adjust/2;
+    }
 
     float x0 = x;
     float y0 = y;
@@ -279,7 +288,7 @@ int main(void) {
         // Test piece 
         {
             float vertices[QUAD_VERTICES * 5];
-            buildPieceVertices(vertices, 0, 1, 0, 0, 6, 2, ctx.atlasTex.width, ctx.atlasTex.height);
+            buildPieceVertices(vertices, 0, 1, 0, 1, 6, 2, ctx.atlasTex.width, ctx.atlasTex.height);
             ctx.testPawn = createQuad(vertices, sizeof(vertices));
         }
     }
