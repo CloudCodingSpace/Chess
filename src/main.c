@@ -11,6 +11,7 @@
 
 #define null 0
 #define QUAD_VERTICES 6
+#define ATLAS_CELL_SIZE 2.0f/8.0f
 
 #define INFO(msg, ...) fprintf(stdout, "INFO: "msg, ##__VA_ARGS__)
 #define ERROR(msg, ...) fprintf(stderr, "ERROR: "msg, ##__VA_ARGS__)
@@ -36,6 +37,7 @@ typedef struct {
     Quad board;
     Texture boardTex;
     Texture atlasTex;
+    Quad testPawn;
 } Ctx;
 
 
@@ -133,8 +135,8 @@ void createTexture(Texture* texture, uint32_t width, uint32_t height, uint8_t* p
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -193,6 +195,38 @@ void renderQuad(Quad* quad, Texture* tex, uint32_t shader) {
     glDrawArrays(GL_TRIANGLES, 0, QUAD_VERTICES);
 }
 
+// @note the out buffer must be of length QUAD_VERTICES * 5
+void buildPieceVertices(float* out, int file, int rank, int col, int row, int atlasCols, int atlasRows, int atlasWidth, int atlasHeight) {
+    float size = ATLAS_CELL_SIZE;
+    float x = -1.0f + file * size;
+    float y = -1.0f + rank * size;
+
+    float cellW = ((float)atlasWidth)/atlasCols;
+    float cellH = ((float)atlasHeight)/atlasRows;
+
+    float u0 = (col * cellW) / atlasWidth;
+    float v0 = (row * cellH) / atlasHeight;
+    float u1 = ((col + 1) * cellW) / atlasWidth;
+    float v1 = ((row + 1) * cellH) / atlasHeight;
+
+    float x0 = x;
+    float y0 = y;
+    float x1 = x + size;
+    float y1 = y + size;
+
+    float verts[] = {
+        x0, y0, 0.0f, u0, v1,
+        x0, y1, 0.0f, u0, v0,
+        x1, y1, 0.0f, u1, v0,
+
+        x0, y0, 0.0f, u0, v1,
+        x1, y1, 0.0f, u1, v0,
+        x1, y0, 0.0f, u1, v1,
+    };
+
+    memcpy(out, verts, sizeof(verts));
+}
+
 int main(void) {
     Ctx ctx = {
         .width = 800,
@@ -234,6 +268,20 @@ int main(void) {
 
             stbi_image_free(data);
         }
+        // Atlas 
+        {
+            int width, height, channels;
+            uint8_t* data = stbi_load("assets/textures/atlas.png", &width, &height, &channels, 4);
+            ASSERT(data != null, "Failed to load the board image! Reason by stb_image: %s\n", stbi_failure_reason());
+        
+            createTexture(&ctx.atlasTex, width, height, data);
+        }
+        // Test piece 
+        {
+            float vertices[QUAD_VERTICES * 5];
+            buildPieceVertices(vertices, 0, 1, 0, 0, 6, 2, ctx.atlasTex.width, ctx.atlasTex.height);
+            ctx.testPawn = createQuad(vertices, sizeof(vertices));
+        }
     }
 
     glEnable(GL_BLEND);
@@ -244,6 +292,7 @@ int main(void) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         renderQuad(&ctx.board, &ctx.boardTex, ctx.shader);
+        renderQuad(&ctx.testPawn, &ctx.atlasTex, ctx.shader);
 
         glfwPollEvents();
         glfwSwapBuffers(ctx.window);
@@ -258,6 +307,9 @@ int main(void) {
 
     // Cleanup
     {
+        deleteTexture(&ctx.atlasTex);
+        deleteQuad(&ctx.testPawn);
+
         deleteQuad(&ctx.board);
         deleteTexture(&ctx.boardTex);
 
