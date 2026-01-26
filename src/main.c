@@ -11,12 +11,25 @@
 
 #define null 0
 #define QUAD_VERTICES 6
-#define ATLAS_CELL_SIZE 2.0f/8.0f
 
 #define INFO(msg, ...) fprintf(stdout, "INFO: "msg, ##__VA_ARGS__)
 #define ERROR(msg, ...) fprintf(stderr, "ERROR: "msg, ##__VA_ARGS__)
 #define ASSERT(expr, msg, ...) do { if(!(expr)) { fprintf(stderr, "ASSERT FAILED! "msg, \
                        ##__VA_ARGS__); exit(1); } } while(0)
+
+typedef enum {
+    TEAM_WHITE,
+    TEAM_BLACK
+} PieceTeam;
+
+typedef enum {
+    PAWN,
+    ROOK,
+    KNIGHT,
+    BISHOP,
+    QUEEN,
+    KING
+} PieceType;
 
 typedef struct {
     uint32_t id;
@@ -29,6 +42,14 @@ typedef struct {
 } Quad;
 
 typedef struct {
+    Texture tex;
+    Quad quad;
+    PieceTeam team;
+    PieceType type;
+    int file, rank;
+} Piece;
+
+typedef struct {
     GLFWwindow* window;
     int width, height;
 
@@ -36,8 +57,8 @@ typedef struct {
 
     Quad board;
     Texture boardTex;
-    Texture atlasTex;
-    Quad testPawn;
+
+    Piece test;
 } Ctx;
 
 
@@ -195,45 +216,76 @@ void renderQuad(Quad* quad, Texture* tex, uint32_t shader) {
     glDrawArrays(GL_TRIANGLES, 0, QUAD_VERTICES);
 }
 
-// @note the out buffer must be of length QUAD_VERTICES * 5
-void buildPieceVertices(float* out, int file, int rank, int col, int row, int atlasCols, int atlasRows, int atlasWidth, int atlasHeight) {
-    float size = ATLAS_CELL_SIZE;
-    float x = -1.0f + file * size;
-    float y = -1.0f + rank * size;
-    const float adjust = 0.018f;
+void createPiece(Piece* piece, PieceType type, PieceTeam team, int file, int rank) {
+    ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
 
-    float cellW = ((float)atlasWidth)/atlasCols;
-    float cellH = ((float)atlasHeight)/atlasRows;
+    piece->file = file - 1;
+    piece->rank = rank - 1;
+    piece->type = type;
+    piece->team = team;
 
-    float u0 = (col * cellW) / atlasWidth;
-    float v0 = (row * cellH) / atlasHeight;
-    float u1 = ((col + 1) * cellW) / atlasWidth;
-    float v1 = ((row + 1) * cellH) / atlasHeight;
+    float size = 2.0f/8.0f;
+    float x0 = -1.0f + (file-1) * size;
+    float y0 = -1.0f + (rank-1) * size;
+    float x1 = x0 + size;
+    float y1 = y0 + size;
 
-    if(col == 0) {
-        u0 -= adjust;
-        u1 -= adjust;
-    } else {
-        u0 += adjust/2;
-        u1 += adjust/2;
-    }
-
-    float x0 = x;
-    float y0 = y;
-    float x1 = x + size;
-    float y1 = y + size;
-
-    float verts[] = {
-        x0, y0, 0.0f, u0, v1,
-        x0, y1, 0.0f, u0, v0,
-        x1, y1, 0.0f, u1, v0,
-
-        x0, y0, 0.0f, u0, v1,
-        x1, y1, 0.0f, u1, v0,
-        x1, y0, 0.0f, u1, v1,
+    float vertices[] = {
+        x0, y1, 0.0f,     0.0f, 1.0f,
+        x0, y0, 0.0f,     0.0f, 0.0f,
+        x1, y0, 0.0f,     1.0f, 0.0f,
+        x0, y1, 0.0f,     0.0f, 1.0f,
+        x1, y0, 0.0f,     1.0f, 0.0f,
+        x1, y1, 0.0f,     1.0f, 1.0f
     };
 
-    memcpy(out, verts, sizeof(verts));
+    piece->quad = createQuad((float*)vertices, sizeof(vertices));
+
+    const char* white[] = {
+        "assets/textures/white_pawn.png",
+        "assets/textures/white_rook.png",
+        "assets/textures/white_knight.png",
+        "assets/textures/white_bishop.png",
+        "assets/textures/white_queen.png",
+        "assets/textures/white_king.png"
+    };
+    const char* black[] = {
+        "assets/textures/black_pawn.png",
+        "assets/textures/black_rook.png",
+        "assets/textures/black_knight.png",
+        "assets/textures/black_bishop.png",
+        "assets/textures/black_queen.png",
+        "assets/textures/black_king.png"
+    };
+    const char* path;
+    if(team == TEAM_WHITE)
+        path = white[(int)type];
+    else
+        path = black[(int)type];
+
+    // texture
+    {
+        stbi_set_flip_vertically_on_load(true);
+        int w, h, ch;
+        uint8_t* pixels = stbi_load(path, &w, &h, &ch, 4);
+        ASSERT(pixels != null, "Failed to load the texture! Path: %s", path);
+        createTexture(&piece->tex, w, h, pixels);
+        free(pixels);
+    }
+}
+
+void deletePiece(Piece* piece) {
+    ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
+    
+    deleteTexture(&piece->tex);
+    deleteQuad(&piece->quad);
+    memset(piece, 0, sizeof(Piece));
+}
+
+void renderPiece(Piece* piece, uint32_t shader) {
+    ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
+
+    renderQuad(&piece->quad, &piece->tex, shader);
 }
 
 int main(void) {
@@ -277,20 +329,7 @@ int main(void) {
 
             stbi_image_free(data);
         }
-        // Atlas 
-        {
-            int width, height, channels;
-            uint8_t* data = stbi_load("assets/textures/atlas.png", &width, &height, &channels, 4);
-            ASSERT(data != null, "Failed to load the board image! Reason by stb_image: %s\n", stbi_failure_reason());
-        
-            createTexture(&ctx.atlasTex, width, height, data);
-        }
-        // Test piece 
-        {
-            float vertices[QUAD_VERTICES * 5];
-            buildPieceVertices(vertices, 0, 1, 0, 1, 6, 2, ctx.atlasTex.width, ctx.atlasTex.height);
-            ctx.testPawn = createQuad(vertices, sizeof(vertices));
-        }
+        createPiece(&ctx.test, PAWN, TEAM_BLACK, 1, 1);
     }
 
     glEnable(GL_BLEND);
@@ -301,7 +340,7 @@ int main(void) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         renderQuad(&ctx.board, &ctx.boardTex, ctx.shader);
-        renderQuad(&ctx.testPawn, &ctx.atlasTex, ctx.shader);
+        renderPiece(&ctx.test, ctx.shader);
 
         glfwPollEvents();
         glfwSwapBuffers(ctx.window);
@@ -316,8 +355,7 @@ int main(void) {
 
     // Cleanup
     {
-        deleteTexture(&ctx.atlasTex);
-        deleteQuad(&ctx.testPawn);
+        deletePiece(&ctx.test);
 
         deleteQuad(&ctx.board);
         deleteTexture(&ctx.boardTex);
