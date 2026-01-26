@@ -47,7 +47,13 @@ typedef struct {
     PieceTeam team;
     PieceType type;
     int file, rank;
+    bool valid;
 } Piece;
+
+typedef struct {
+    bool board[8][8]; // to know if any slot on the board is occupied or not
+    Piece pieces[8 * 4];
+} PieceManager;
 
 typedef struct {
     GLFWwindow* window;
@@ -58,7 +64,7 @@ typedef struct {
     Quad board;
     Texture boardTex;
 
-    Piece test;
+    PieceManager manager;
 } Ctx;
 
 
@@ -219,6 +225,7 @@ void renderQuad(Quad* quad, Texture* tex, uint32_t shader) {
 void createPiece(Piece* piece, PieceType type, PieceTeam team, int file, int rank) {
     ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
 
+    piece->valid = true;
     piece->file = file - 1;
     piece->rank = rank - 1;
     piece->type = type;
@@ -279,13 +286,71 @@ void deletePiece(Piece* piece) {
     
     deleteTexture(&piece->tex);
     deleteQuad(&piece->quad);
-    memset(piece, 0, sizeof(Piece));
+    piece->valid = false;
 }
 
 void renderPiece(Piece* piece, uint32_t shader) {
     ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
 
     renderQuad(&piece->quad, &piece->tex, shader);
+}
+
+void initPieceManager(PieceManager* manager) {
+    ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
+
+    int idx = 0;
+    for(int i = 0; i < 8; i++) {
+        createPiece(&manager->pieces[idx++], PAWN, TEAM_WHITE, i+1, 2);
+    }
+    for(int i = 0; i < 8; i++) {
+        createPiece(&manager->pieces[idx++], PAWN, TEAM_BLACK, i+1, 7);
+    }
+    createPiece(&manager->pieces[idx++], ROOK, TEAM_WHITE, 1, 1);
+    createPiece(&manager->pieces[idx++], ROOK, TEAM_WHITE, 8, 1);
+    createPiece(&manager->pieces[idx++], KNIGHT, TEAM_WHITE, 2, 1);
+    createPiece(&manager->pieces[idx++], KNIGHT, TEAM_WHITE, 7, 1);
+    createPiece(&manager->pieces[idx++], BISHOP, TEAM_WHITE, 3, 1);
+    createPiece(&manager->pieces[idx++], BISHOP, TEAM_WHITE, 6, 1);
+    createPiece(&manager->pieces[idx++], QUEEN, TEAM_WHITE, 4, 1);
+    createPiece(&manager->pieces[idx++], KING, TEAM_WHITE, 5, 1);
+
+    createPiece(&manager->pieces[idx++], ROOK, TEAM_BLACK, 1, 8);
+    createPiece(&manager->pieces[idx++], ROOK, TEAM_BLACK, 8, 8);
+    createPiece(&manager->pieces[idx++], KNIGHT, TEAM_BLACK, 2, 8);
+    createPiece(&manager->pieces[idx++], KNIGHT, TEAM_BLACK, 7, 8);
+    createPiece(&manager->pieces[idx++], BISHOP, TEAM_BLACK, 3, 8);
+    createPiece(&manager->pieces[idx++], BISHOP, TEAM_BLACK, 6, 8);
+    createPiece(&manager->pieces[idx++], QUEEN, TEAM_BLACK, 4, 8);
+    createPiece(&manager->pieces[idx++], KING, TEAM_BLACK, 5, 8);
+
+    for(int i = 0; i < 8; i++) {
+        manager->board[i][0] = true;
+        manager->board[i][1] = true;
+        manager->board[i][6] = true;
+        manager->board[i][7] = true;
+    }
+}
+
+void deinitPieceManager(PieceManager* manager) {
+    ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
+
+    for(int i = 0; i < 8 * 4; i++) {
+        if(manager->pieces[i].valid) {
+            deletePiece(&manager->pieces[i]);
+        }
+    }
+
+    memset(manager, 0, sizeof(PieceManager));
+}
+
+void renderPieces(PieceManager* manager, uint32_t shader) {
+    ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
+
+    for(int i = 0; i < 8 * 4; i++) {
+        if(manager->pieces[i].valid) {
+            renderPiece(&manager->pieces[i], shader);
+        }
+    }
 }
 
 int main(void) {
@@ -321,7 +386,7 @@ int main(void) {
             stbi_set_flip_vertically_on_load(false);
 
             int width, height, channels;
-            uint8_t* data = stbi_load("assets/textures/board.jpg", &width, &height, &channels, 4);
+            uint8_t* data = stbi_load("assets/textures/board.png", &width, &height, &channels, 4);
             ASSERT(data != null, "Failed to load the board image! Reason by stb_image: %s\n", stbi_failure_reason());
 
             ctx.board = createQuad((float*)BOARD_VERTICES, sizeof(BOARD_VERTICES));
@@ -329,7 +394,8 @@ int main(void) {
 
             stbi_image_free(data);
         }
-        createPiece(&ctx.test, PAWN, TEAM_BLACK, 1, 1);
+
+        initPieceManager(&ctx.manager);
     }
 
     glEnable(GL_BLEND);
@@ -340,7 +406,7 @@ int main(void) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         renderQuad(&ctx.board, &ctx.boardTex, ctx.shader);
-        renderPiece(&ctx.test, ctx.shader);
+        renderPieces(&ctx.manager, ctx.shader);
 
         glfwPollEvents();
         glfwSwapBuffers(ctx.window);
@@ -355,7 +421,7 @@ int main(void) {
 
     // Cleanup
     {
-        deletePiece(&ctx.test);
+        deinitPieceManager(&ctx.manager);
 
         deleteQuad(&ctx.board);
         deleteTexture(&ctx.boardTex);
