@@ -385,16 +385,6 @@ void updatePieces(PieceManager* manager, GLFWwindow* window) {
     ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
     ASSERT(window != null, "The window ptr provided shouldn't be null!");
 
-    // test
-    if(glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
-        static int c = 0;
-        if(c % 2 == 0) {
-            updatePiecePosition(&manager->pieces[0], 2, 3);
-        } else {
-            updatePiecePosition(&manager->pieces[0], 1, 2);
-        }
-        c++;
-    }
 }
 
 int main(void) {
