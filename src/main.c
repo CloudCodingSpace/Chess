@@ -80,7 +80,8 @@ static float BOARD_VERTICES[] = {
 
 char* readFile(const char* path) {
     ASSERT(path != null, "The path shouldn't be null!\n");
-    FILE* file = fopen(path, "rt");
+    FILE* file;
+    fopen_s(&file, path, "rt");
     ASSERT(file != null, "Can't read file! Path: %s\n", path);
 
     fseek(file, 0, SEEK_END);
@@ -190,7 +191,7 @@ Quad createQuad(float* data, size_t dataSize) {
     glBindVertexArray(q.vao);
 
     glBindBuffer(GL_ARRAY_BUFFER, q.vbo);
-    glBufferData(GL_ARRAY_BUFFER, dataSize, data, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, dataSize, data, GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(sizeof(float) * 3));
@@ -208,6 +209,15 @@ void deleteQuad(Quad* quad) {
     glDeleteVertexArrays(1, &quad->vao);
 }
 
+void updateQuadVertices(Quad* quad, size_t size, float* data) {
+    ASSERT(quad != null, "The quad shouldn't be null!\n");
+    ASSERT(data != null, "The vertex data provided shouldn't be null!\n");
+
+    glBindVertexArray(quad->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, quad->vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
+}
+
 void renderQuad(Quad* quad, Texture* tex, uint32_t shader) {
     ASSERT(quad != null, "The quad shouldn't be null!");
     ASSERT(tex != null, "The tex shouldn't be null!");
@@ -222,22 +232,15 @@ void renderQuad(Quad* quad, Texture* tex, uint32_t shader) {
     glDrawArrays(GL_TRIANGLES, 0, QUAD_VERTICES);
 }
 
-void createPiece(Piece* piece, PieceType type, PieceTeam team, int file, int rank) {
-    ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
-
-    piece->valid = true;
-    piece->file = file - 1;
-    piece->rank = rank - 1;
-    piece->type = type;
-    piece->team = team;
-
+// @note Make sure the 'out' is of length QUAD_VERTICES * 5
+void getPieceVertices(float* out, int file, int rank) {
     float size = 2.0f/8.0f;
     float x0 = -1.0f + (file-1) * size;
     float y0 = -1.0f + (rank-1) * size;
     float x1 = x0 + size;
     float y1 = y0 + size;
 
-    float vertices[] = {
+    float cpy[] = {
         x0, y1, 0.0f,     0.0f, 1.0f,
         x0, y0, 0.0f,     0.0f, 0.0f,
         x1, y0, 0.0f,     1.0f, 0.0f,
@@ -245,6 +248,21 @@ void createPiece(Piece* piece, PieceType type, PieceTeam team, int file, int ran
         x1, y0, 0.0f,     1.0f, 0.0f,
         x1, y1, 0.0f,     1.0f, 1.0f
     };
+
+    memcpy(out, cpy, sizeof(cpy));
+}
+
+void createPiece(Piece* piece, PieceType type, PieceTeam team, int file, int rank) {
+    ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
+
+    piece->valid = true;
+    piece->file = file;
+    piece->rank = rank;
+    piece->type = type;
+    piece->team = team;
+
+    float vertices[QUAD_VERTICES * 5];
+    getPieceVertices(vertices, file, rank);
 
     piece->quad = createQuad((float*)vertices, sizeof(vertices));
 
@@ -287,6 +305,16 @@ void deletePiece(Piece* piece) {
     deleteTexture(&piece->tex);
     deleteQuad(&piece->quad);
     piece->valid = false;
+}
+
+void updatePiecePosition(Piece* piece, int file, int rank) {
+    ASSERT(piece != null, "The piece ptr provided shouldn't be null!");
+    piece->file = file;
+    piece->rank = rank;
+
+    float vertices[QUAD_VERTICES * 5];
+    getPieceVertices(vertices, file, rank);
+    updateQuadVertices(&piece->quad, sizeof(vertices), vertices);
 }
 
 void renderPiece(Piece* piece, uint32_t shader) {
@@ -350,6 +378,22 @@ void renderPieces(PieceManager* manager, uint32_t shader) {
         if(manager->pieces[i].valid) {
             renderPiece(&manager->pieces[i], shader);
         }
+    }
+}
+
+void updatePieces(PieceManager* manager, GLFWwindow* window) {
+    ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
+    ASSERT(window != null, "The window ptr provided shouldn't be null!");
+
+    // test
+    if(glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+        static int c = 0;
+        if(c % 2 == 0) {
+            updatePiecePosition(&manager->pieces[0], 2, 3);
+        } else {
+            updatePiecePosition(&manager->pieces[0], 1, 2);
+        }
+        c++;
     }
 }
 
@@ -417,6 +461,8 @@ int main(void) {
         if(glfwGetKey(ctx.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             break;
         }
+
+        updatePieces(&ctx.manager, ctx.window);
     }
 
     // Cleanup
