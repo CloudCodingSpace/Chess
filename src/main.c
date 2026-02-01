@@ -430,6 +430,12 @@ void updatePieces(PieceManager* manager, GLFWwindow* window, int width, int heig
             
             isClicked = false;
 
+
+            if (file != 0 && rank != 0 && !piece) {
+                file = rank = oFile = oRank = 0;
+                return;
+            }
+
             if(oFile != 0 && oRank != 0) {
                 if(manager->board[oFile-1][oRank-1])
                     return;
