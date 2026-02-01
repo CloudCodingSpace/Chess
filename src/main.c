@@ -385,44 +385,65 @@ void renderPieces(PieceManager* manager, uint32_t shader) {
     }
 }
 
+void getBoardPos(GLFWwindow* window, int width, int height, double x, double y, int* file, int* rank) {
+    x /= width;
+    y /= height;
+    x *= 8;
+    y *= 8;
+    if(x == 8)
+        x = 7;
+    if(y == 8)
+        y = 7;
+
+    *file = floorl(x) + 1;
+    *rank = 8 - floorl(y);
+}
+
 void updatePieces(PieceManager* manager, GLFWwindow* window, int width, int height) {
     ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
     ASSERT(window != null, "The window ptr provided shouldn't be null!");
     static bool isClicked = false;
-    Piece* piece = null;
-    int file, rank;
+    static Piece* piece = null;
+    static int file = 0, rank = 0, oFile = 0, oRank = 0;
 
     if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
         isClicked = true;
     } else if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
         if(isClicked) {
-            double X, Y;
-            glfwGetCursorPos(window, &X, &Y);
-            X /= width;
-            Y /= height;
-            X *= 8;
-            Y *= 8;
-            if(X == 8)
-                X = 7;
-            if(Y == 8)
-                Y = 7;
-            file = floorl(X) + 1;
-            rank = 8 - floorl(Y);
+            double x, y;
+            glfwGetCursorPos(window, &x, &y);
+            if(file == 0 && rank == 0)
+                getBoardPos(window, width, height, x, y, &file, &rank);
+            else
+                getBoardPos(window, width, height, x, y, &oFile, &oRank);
+
             for(int i = 0; i < 8 * 4; i++) {
                 Piece* p = &manager->pieces[i];
+                
+                if(piece) {
+                    break;
+                }
+
                 if(p->valid && (p->rank == rank) && (p->file == file))
                     piece = p;
             }
+            
+            isClicked = false;
+
+            if(oFile != 0 && oRank != 0) {
+                if(manager->board[oFile-1][oRank-1])
+                    return;
+                manager->board[file-1][rank-1] = false;
+                manager->board[oFile-1][oRank-1] = true;
+                updatePiecePosition(piece, oFile, oRank);     
+
+                oFile = oRank = rank = file = 0;
+                piece = null;
+            } else {
+                return;
+            }
         }
-        isClicked = false;
     }
-
-    if(!manager->board[file-1][rank-1] || !piece)
-        return;
-
-    INFO("Piece selected! Team: %s, Pos: (%d, %d)\n", 
-         (piece->team == TEAM_WHITE) ? "White" : "Black",
-         file, rank);
 }
 
 int main(void) {
