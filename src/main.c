@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +12,9 @@
 
 #define null 0
 #define QUAD_VERTICES 6
+
+#define FILES 8
+#define RANKS 8
 
 #define INFO(msg, ...) fprintf(stdout, "INFO: "msg, ##__VA_ARGS__)
 #define ERROR(msg, ...) fprintf(stderr, "ERROR: "msg, ##__VA_ARGS__)
@@ -51,7 +55,7 @@ typedef struct {
 } Piece;
 
 typedef struct {
-    bool board[8][8]; // to know if any slot on the board is occupied or not
+    bool board[FILES][RANKS]; // to know if any slot on the board is occupied or not
     Piece pieces[8 * 4];
 } PieceManager;
 
@@ -327,10 +331,10 @@ void initPieceManager(PieceManager* manager) {
     ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
 
     int idx = 0;
-    for(int i = 0; i < 8; i++) {
+    for(int i = 0; i < FILES; i++) {
         createPiece(&manager->pieces[idx++], PAWN, TEAM_WHITE, i+1, 2);
     }
-    for(int i = 0; i < 8; i++) {
+    for(int i = 0; i < FILES; i++) {
         createPiece(&manager->pieces[idx++], PAWN, TEAM_BLACK, i+1, 7);
     }
     createPiece(&manager->pieces[idx++], ROOK, TEAM_WHITE, 1, 1);
@@ -351,7 +355,7 @@ void initPieceManager(PieceManager* manager) {
     createPiece(&manager->pieces[idx++], QUEEN, TEAM_BLACK, 4, 8);
     createPiece(&manager->pieces[idx++], KING, TEAM_BLACK, 5, 8);
 
-    for(int i = 0; i < 8; i++) {
+    for(int i = 0; i < FILES; i++) {
         manager->board[i][0] = true;
         manager->board[i][1] = true;
         manager->board[i][6] = true;
@@ -381,10 +385,44 @@ void renderPieces(PieceManager* manager, uint32_t shader) {
     }
 }
 
-void updatePieces(PieceManager* manager, GLFWwindow* window) {
+void updatePieces(PieceManager* manager, GLFWwindow* window, int width, int height) {
     ASSERT(manager != null, "The manager ptr provided shouldn't be null!");
     ASSERT(window != null, "The window ptr provided shouldn't be null!");
+    static bool isClicked = false;
+    Piece* piece = null;
+    int file, rank;
 
+    if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        isClicked = true;
+    } else if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
+        if(isClicked) {
+            double X, Y;
+            glfwGetCursorPos(window, &X, &Y);
+            X /= width;
+            Y /= height;
+            X *= 8;
+            Y *= 8;
+            if(X == 8)
+                X = 7;
+            if(Y == 8)
+                Y = 7;
+            file = floorl(X) + 1;
+            rank = 8 - floorl(Y);
+            for(int i = 0; i < 8 * 4; i++) {
+                Piece* p = &manager->pieces[i];
+                if(p->valid && (p->rank == rank) && (p->file == file))
+                    piece = p;
+            }
+        }
+        isClicked = false;
+    }
+
+    if(!manager->board[file-1][rank-1] || !piece)
+        return;
+
+    INFO("Piece selected! Team: %s, Pos: (%d, %d)\n", 
+         (piece->team == TEAM_WHITE) ? "White" : "Black",
+         file, rank);
 }
 
 int main(void) {
@@ -438,21 +476,21 @@ int main(void) {
     glfwShowWindow(ctx.window);
     while(!glfwWindowShouldClose(ctx.window)) {
         glClear(GL_COLOR_BUFFER_BIT);
-
+        // render
         renderQuad(&ctx.board, &ctx.boardTex, ctx.shader);
         renderPieces(&ctx.manager, ctx.shader);
-
-        glfwPollEvents();
-        glfwSwapBuffers(ctx.window);
-
+        // update
+        updatePieces(&ctx.manager, ctx.window, ctx.width, ctx.height);
+        // viewport update        
         glfwGetWindowSize(ctx.window, &ctx.width, &ctx.height);
         glViewport(0, 0, ctx.width, ctx.height);
-    
+        // inputs
         if(glfwGetKey(ctx.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             break;
         }
-
-        updatePieces(&ctx.manager, ctx.window);
+        // window event polling
+        glfwPollEvents();
+        glfwSwapBuffers(ctx.window);
     }
 
     // Cleanup
